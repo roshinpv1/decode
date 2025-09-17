@@ -12,7 +12,10 @@ import {
   faBolt,
   faTrophy,
   faWrench,
-  faClock
+  faClock,
+  faComments,
+  faUsers,
+  faChartLine
 } from '@fortawesome/free-solid-svg-icons'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
@@ -38,15 +41,96 @@ export default function ChatbotPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPrompts, setShowPrompts] = useState(false)
   const [timeLeft, setTimeLeft] = useState('')
+  const [metrics, setMetrics] = useState({
+    totalMessages: 0,
+    activeUsers: 1,
+    avgResponseTime: 0,
+    sessionDuration: 0
+  })
+  const [sessionStart] = useState(new Date())
+  const [userInfo, setUserInfo] = useState({
+    ipAddress: '',
+    sessionId: '',
+    userAgent: '',
+    displayName: '',
+    location: ''
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  // Get IP and session info
+  const getUserInfo = async () => {
+    try {
+      // Get or create session ID
+      let sessionId = sessionStorage.getItem('hackathon-session')
+      if (!sessionId) {
+        sessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+        sessionStorage.setItem('hackathon-session', sessionId)
+      }
+
+      // Fetch IP address from a free service
+      const response = await fetch('https://api.ipify.org?format=json')
+      const data = await response.json()
+      const ipAddress = data.ip
+      
+      // Get location info (optional)
+      let location = ''
+      try {
+        const locationResponse = await fetch(`https://ipapi.co/${ipAddress}/json/`)
+        const locationData = await locationResponse.json()
+        location = `${locationData.city}, ${locationData.country_name}` || 'Unknown Location'
+      } catch (error) {
+        console.log('Could not fetch location:', error)
+        location = 'Unknown Location'
+      }
+      
+      const displayName = `User ${ipAddress.split('.').pop()}`
+      
+      return {
+        ipAddress,
+        sessionId,
+        userAgent: navigator.userAgent,
+        displayName,
+        location
+      }
+    } catch (error) {
+      console.error('Error fetching IP:', error)
+      
+      // Fallback to session-based ID
+      let sessionId = sessionStorage.getItem('hackathon-session')
+      if (!sessionId) {
+        sessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+        sessionStorage.setItem('hackathon-session', sessionId)
+      }
+      
+      return {
+        ipAddress: 'Unknown',
+        sessionId,
+        userAgent: navigator.userAgent,
+        displayName: `User #${sessionId.slice(-4)}`,
+        location: 'Unknown Location'
+      }
+    }
+  }
+
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Initialize user info on mount
+  useEffect(() => {
+    const initializeUser = async () => {
+      console.log('Fetching user IP address...')
+      const info = await getUserInfo()
+      setUserInfo(info)
+      console.log('User Info Detected:', info)
+    }
+    
+    initializeUser()
+  }, [])
 
   // Countdown timer logic
   useEffect(() => {
@@ -82,6 +166,33 @@ export default function ChatbotPage() {
     
     return () => clearInterval(timer)
   }, [])
+
+  // Update metrics in real-time
+  useEffect(() => {
+    const updateMetrics = () => {
+      const userMessages = messages.filter(m => m.role === 'user')
+      const botMessages = messages.filter(m => m.role === 'bot')
+      
+      // Calculate average response time (simulated for demo)
+      const avgResponseTime = botMessages.length > 0 ? 
+        Math.floor(Math.random() * 2000) + 500 : 0 // 500-2500ms
+      
+      // Calculate session duration in minutes
+      const sessionDuration = Math.floor((new Date().getTime() - sessionStart.getTime()) / (1000 * 60))
+      
+      setMetrics({
+        totalMessages: messages.length - 1, // Exclude initial bot message
+        activeUsers: Math.floor(Math.random() * 15) + 5, // Simulated 5-20 active users
+        avgResponseTime,
+        sessionDuration
+      })
+    }
+
+    updateMetrics()
+    const metricsTimer = setInterval(updateMetrics, 5000) // Update every 5 seconds
+
+    return () => clearInterval(metricsTimer)
+  }, [messages, sessionStart])
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
@@ -185,18 +296,47 @@ export default function ChatbotPage() {
               <div className="flex-shrink-0">
                 
               </div>
-              <div>
-                <h1 className="text-3xl font-open-sans  text-[#d71e28] tracking-tight">Hackathon Bot</h1>
-                <p className="text-sm text-gray-700 font-medium">Let the hacking begin!</p>
-              </div>
+                  <div>
+                    <h1 className="text-3xl font-open-sans  text-[#d71e28] tracking-tight">Hackathon Bot</h1>
+                    <p className="text-sm text-gray-700 font-medium">
+                      Let the hacking begin! 
+                      {userInfo.displayName ? (
+                        <span className="text-brand-red ml-2">
+                          Welcome, {userInfo.displayName}! {userInfo.location && `(${userInfo.location})`}
+                        </span>
+                      ) : (
+                        <span className="text-gray-500 ml-2">
+                          Identifying user...
+                        </span>
+                      )}
+                    </p>
+                  </div>
             </div>
             
-            {/* Countdown Timer */}
-            <div className="flex items-center space-x-2">
-              <FontAwesomeIcon icon={faClock} className="h-4 w-4 text-brand-red" />
-              <div className="text-brand-red">
-                <div className="text-xs font-medium uppercase tracking-wide hidden sm:block">Time Left</div>
-                <div className="text-sm sm:text-lg font-bold font-mono">{timeLeft || 'Loading...'}</div>
+            <div className="flex items-center space-x-6">
+              {/* Mini Metrics Panel */}
+              <div className="hidden lg:flex items-center space-x-4 text-gray-600">
+                <div className="flex items-center space-x-1" title="Total messages in this session">
+                  <FontAwesomeIcon icon={faComments} className="h-3 w-3" />
+                  <span className="text-xs font-medium">{metrics.totalMessages}</span>
+                </div>
+                <div className="flex items-center space-x-1" title="Active users online">
+                  <FontAwesomeIcon icon={faUsers} className="h-3 w-3" />
+                  <span className="text-xs font-medium">{metrics.activeUsers}</span>
+                </div>
+                <div className="flex items-center space-x-1" title="Average response time">
+                  <FontAwesomeIcon icon={faChartLine} className="h-3 w-3" />
+                  <span className="text-xs font-medium">{metrics.avgResponseTime}ms</span>
+                </div>
+              </div>
+
+              {/* Countdown Timer */}
+              <div className="flex items-center space-x-2">
+                <FontAwesomeIcon icon={faClock} className="h-4 w-4 text-brand-red" />
+                <div className="text-brand-red">
+                  <div className="text-xs font-medium uppercase tracking-wide hidden sm:block">Time Left</div>
+                  <div className="text-sm sm:text-lg font-bold font-mono">{timeLeft || 'Loading...'}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -371,8 +511,24 @@ export default function ChatbotPage() {
             </div>
           )}
 
-          {/* Input Area */}
-          <div className="border-t border-gray-200 p-4">
+              {/* Debug Info Panel */}
+              {userInfo.sessionId && (
+                <div className="border-t border-gray-100 px-4 py-2 bg-gray-50">
+                  <details className="text-xs text-gray-600">
+                    <summary className="cursor-pointer hover:text-brand-red">🔍 Debug: User Info</summary>
+                    <div className="mt-2 space-y-1 font-mono">
+                      <div><strong>IP Address:</strong> {userInfo.ipAddress}</div>
+                      <div><strong>Location:</strong> {userInfo.location}</div>
+                      <div><strong>Session ID:</strong> {userInfo.sessionId}</div>
+                      <div><strong>Display Name:</strong> {userInfo.displayName}</div>
+                      <div><strong>User Agent:</strong> {userInfo.userAgent}</div>
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              {/* Input Area */}
+              <div className="border-t border-gray-200 p-4">
             <div className="flex space-x-3">
               <div className="flex-1 relative">
                 <textarea
