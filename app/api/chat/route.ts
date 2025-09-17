@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { writeFile, appendFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
+import { getDatabase } from '../../../lib/database'
 
 // Helper function to get client IP address
 function getClientIP(request: NextRequest): string {
@@ -101,11 +102,17 @@ export async function POST(request: NextRequest) {
   const userAgent = request.headers.get('user-agent') || 'unknown'
   
   try {
-    const { message } = await request.json()
+    const { message, sessionId } = await request.json()
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
     }
+    
+    // Initialize database
+    const db = getDatabase()
+    
+    // Save user message to database
+    const userMessageId = db.saveMessage(clientIP, message, 'user', sessionId, userAgent)
     
     // Log the user request before LLM call
     await logUserRequest(clientIP, message, userAgent, request)
@@ -205,12 +212,17 @@ Important Rules
     const data = await response.json()
     const botMessage = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.'
 
+    // Save bot response to database
+    const botMessageId = db.saveMessage(clientIP, botMessage, 'bot', sessionId, userAgent)
+
     // Log successful LLM response
     const successLog = {
       timestamp: new Date().toISOString(),
       ip: clientIP,
       responseLength: botMessage.length,
-      event: 'LLM_RESPONSE_SUCCESS'
+      event: 'LLM_RESPONSE_SUCCESS',
+      userMessageId,
+      botMessageId
     }
     console.log('✅ LLM RESPONSE SUCCESS:', successLog)
     await writeToLogFile(successLog)
