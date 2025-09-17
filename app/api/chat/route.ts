@@ -19,8 +19,8 @@ function getClientIP(request: NextRequest): string {
   if (realIP) return realIP
   if (clientIP) return clientIP
   
-  // Get the request IP
-  const requestIP = request.ip || 'unknown'
+  // Get the request IP (NextRequest doesn't have ip property in types)
+  const requestIP = (request as any).ip || 'unknown'
   
   // Handle local development IPs
   if (requestIP === '::1' || requestIP === '127.0.0.1') {
@@ -58,7 +58,7 @@ async function writeToLogFile(logEntry: any) {
 // Debug function to show all IP-related headers
 function debugIPHeaders(request: NextRequest) {
   const ipDebug = {
-    'request.ip': request.ip,
+    'request.ip': (request as any).ip,
     'x-forwarded-for': request.headers.get('x-forwarded-for'),
     'x-real-ip': request.headers.get('x-real-ip'),
     'x-client-ip': request.headers.get('x-client-ip'),

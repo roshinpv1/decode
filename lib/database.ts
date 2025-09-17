@@ -181,8 +181,8 @@ class ChatDatabase {
     `).all()
 
     return {
-      ...stats,
-      ...recentActivity,
+      ...(stats as object),
+      ...(recentActivity as object),
       topUsers
     }
   }

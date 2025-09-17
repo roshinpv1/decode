@@ -55,10 +55,41 @@ export default function ChatbotPage() {
     displayName: '',
     location: ''
   })
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  // Load chat history from database
+  const loadChatHistory = async (sessionId?: string) => {
+    try {
+      setIsLoadingHistory(true)
+      const url = sessionId ? `/api/chat/history?sessionId=${sessionId}` : '/api/chat/history'
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      if (data.messages && data.messages.length > 0) {
+        // Convert timestamp strings back to Date objects
+        const loadedMessages = data.messages.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }))
+        
+        // If we have previous messages, replace the initial bot message
+        setMessages(loadedMessages)
+        console.log(`📜 Loaded ${loadedMessages.length} previous messages`)
+      } else {
+        // Keep the default welcome message if no history
+        console.log('📜 No previous chat history found')
+      }
+    } catch (error) {
+      console.error('Failed to load chat history:', error)
+      // Keep default messages on error
+    } finally {
+      setIsLoadingHistory(false)
+    }
   }
 
   // Get IP and session info
@@ -120,13 +151,16 @@ export default function ChatbotPage() {
     scrollToBottom()
   }, [messages])
 
-  // Initialize user info on mount
+  // Initialize user info and load chat history on mount
   useEffect(() => {
     const initializeUser = async () => {
       console.log('Fetching user IP address...')
       const info = await getUserInfo()
       setUserInfo(info)
       console.log('User Info Detected:', info)
+      
+      // Load chat history after getting user info
+      await loadChatHistory(info.sessionId)
     }
     
     initializeUser()
@@ -214,7 +248,10 @@ export default function ChatbotPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: inputMessage }),
+        body: JSON.stringify({ 
+          message: inputMessage,
+          sessionId: userInfo.sessionId 
+        }),
       })
 
       const data = await response.json()
@@ -345,30 +382,35 @@ export default function ChatbotPage() {
 
       {/* Chat Messages */}
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pt-24">
-        <div className="bg-brand-white rounded-xl shadow-lg border border-gray-200 h-full flex flex-col">
-          <div className="flex-1 p-6 overflow-y-auto space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}
-              >
-                <div className={`flex items-start space-x-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.role === 'user' 
-                      ? 'bg-brand-red' 
-                      : 'bg-brand-yellow'
-                  }`}>
-                    {message.role === 'user' ? (
-                      <FontAwesomeIcon icon={faUser} className="h-4 w-4 text-white" />
-                    ) : (
-                      <FontAwesomeIcon icon={faRobot} className="h-4 w-4 text-gray-800" />
-                    )}
-                  </div>
-                  <div className={`rounded-2xl px-4 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-brand-red text-white'
-                      : 'bg-gray-50 text-gray-800 border border-gray-200'
-                  }`}>
+          <div className="bg-brand-white rounded-xl shadow-lg border border-gray-200 h-full flex flex-col">
+            <div className="flex-1 p-6 overflow-y-auto space-y-4">
+              {isLoadingHistory ? (
+                <div className="flex justify-center items-center py-8">
+                  <div className="text-gray-500 text-sm">Loading chat history...</div>
+                </div>
+              ) : (
+                messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}
+                  >
+                    <div className={`flex items-start space-x-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                        message.role === 'user' 
+                          ? 'bg-brand-red' 
+                          : 'bg-brand-yellow'
+                      }`}>
+                        {message.role === 'user' ? (
+                          <FontAwesomeIcon icon={faUser} className="h-4 w-4 text-white" />
+                        ) : (
+                          <FontAwesomeIcon icon={faRobot} className="h-4 w-4 text-gray-800" />
+                        )}
+                      </div>
+                      <div className={`rounded-2xl px-4 py-3 ${
+                        message.role === 'user'
+                          ? 'bg-brand-red text-white'
+                          : 'bg-gray-50 text-gray-800 border border-gray-200'
+                      }`}>
                     {message.role === 'bot' ? (
                       <div className="markdown-content">
                         <ReactMarkdown 
@@ -451,10 +493,11 @@ export default function ChatbotPage() {
                     }`}>
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                ))
+              )}
             
             {isLoading && (
               <div className="flex justify-start animate-slide-up">
