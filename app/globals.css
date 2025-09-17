@@ -29,6 +29,7 @@
   }
   
   .typing-dot {
-    @apply w-2 h-2 bg-gray-400 rounded-full animate-pulse;
+    @apply w-2 h-2 rounded-full animate-pulse;
+    background-color: #d71e28;
   }
 }

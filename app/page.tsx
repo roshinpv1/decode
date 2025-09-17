@@ -1,7 +1,19 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Send, Bot, User, Zap, Lightbulb } from 'lucide-react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { 
+  faPaperPlane, 
+  faRobot, 
+  faUser, 
+  faLightbulb,
+  faBug,
+  faRocket,
+  faBolt,
+  faTrophy,
+  faWrench,
+  faClock
+} from '@fortawesome/free-solid-svg-icons'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -25,6 +37,7 @@ export default function ChatbotPage() {
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [showPrompts, setShowPrompts] = useState(false)
+  const [timeLeft, setTimeLeft] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -34,6 +47,41 @@ export default function ChatbotPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Countdown timer logic
+  useEffect(() => {
+    // Set fixed hackathon end time - CUSTOMIZE THIS DATE AND TIME
+    // Format: 'YYYY-MM-DDTHH:MM:SS' (24-hour format)
+    // Example: '2024-12-20T18:00:00' = December 20, 2024 at 6:00 PM
+    const hackathonEnd = new Date('2025-10-13T18:00:00')
+    
+    const updateCountdown = () => {
+      const now = new Date()
+      const difference = hackathonEnd.getTime() - now.getTime()
+      
+      if (difference > 0) {
+        const days = Math.floor(difference / (1000 * 60 * 60 * 24))
+        const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+        const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
+        const seconds = Math.floor((difference % (1000 * 60)) / 1000)
+        
+        if (days > 0) {
+          setTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`)
+        } else if (hours > 0) {
+          setTimeLeft(`${hours}h ${minutes}m ${seconds}s`)
+        } else {
+          setTimeLeft(`${minutes}m ${seconds}s`)
+        }
+      } else {
+        setTimeLeft('Hackathon Ended!')
+      }
+    }
+    
+    updateCountdown()
+    const timer = setInterval(updateCountdown, 1000)
+    
+    return () => clearInterval(timer)
+  }, [])
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
@@ -91,32 +139,32 @@ export default function ChatbotPage() {
 
   const predefinedPrompts = [
     {
-      icon: "💡",
+      icon: faLightbulb,
       title: "Topics",
       prompt: "What are all the topics included in the hackathon"
     },
     {
-      icon: "🐛",
+      icon: faBug,
       title: "Deployment Options",
       prompt: "Help me debug this code issue: "
     },
     {
-      icon: "🚀",
+      icon: faRocket,
       title: "Team Structure",
       prompt: "What's the best tech stack for building a web app in 48 hours?"
     },
     {
-      icon: "⚡",
+      icon: faBolt,
       title: "Quick Setup",
       prompt: "How do I quickly set up a React app with API integration?"
     },
     {
-      icon: "🏆",
+      icon: faTrophy,
       title: "Best Practices",
       prompt: "What are the key best practices for winning a hackathon?"
     },
     {
-      icon: "🔧",
+      icon: faWrench,
       title: "Code Review",
       prompt: "Review my code and suggest improvements: "
     }
@@ -128,31 +176,36 @@ export default function ChatbotPage() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-brand-white to-gray-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-brand-white shadow-lg border-b-2 border-brand-red">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center space-x-4">
-            <div className="flex-shrink-0">
-              <Image
-                src="/icon.png"
-                alt="CCPMT DECODE Logo"
-                width={80}
-                height={40}
-                className=""
-              />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex-shrink-0">
+                
+              </div>
+              <div>
+                <h1 className="text-3xl font-open-sans  text-[#d71e28] tracking-tight">Hackathon Bot</h1>
+                <p className="text-sm text-gray-700 font-medium">Let the hacking begin!</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-3xl font-helvetica font-bold bg-gradient-to-r from-yellow-900 via-blue-900 to-purple-900 bg-clip-text text-transparent tracking-tight">Hackathon Bot</h1>
-              <p className="text-sm text-gray-600 font-medium">Let the hacking begin!</p>
+            
+            {/* Countdown Timer */}
+            <div className="flex items-center space-x-2">
+              <FontAwesomeIcon icon={faClock} className="h-4 w-4 text-brand-red" />
+              <div className="text-brand-red">
+                <div className="text-xs font-medium uppercase tracking-wide hidden sm:block">Time Left</div>
+                <div className="text-sm sm:text-lg font-bold font-mono">{timeLeft || 'Loading...'}</div>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Chat Messages */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
-        <div className="bg-white rounded-xl shadow-lg h-full flex flex-col">
+      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pt-24">
+        <div className="bg-brand-white rounded-xl shadow-lg border border-gray-200 h-full flex flex-col">
           <div className="flex-1 p-6 overflow-y-auto space-y-4">
             {messages.map((message) => (
               <div
@@ -162,19 +215,19 @@ export default function ChatbotPage() {
                 <div className={`flex items-start space-x-3 max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
                   <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                     message.role === 'user' 
-                      ? 'bg-blue-500' 
-                      : 'bg-gradient-to-r from-purple-500 to-pink-500'
+                      ? 'bg-brand-red' 
+                      : 'bg-brand-yellow'
                   }`}>
                     {message.role === 'user' ? (
-                      <User className="h-4 w-4 text-white" />
+                      <FontAwesomeIcon icon={faUser} className="h-4 w-4 text-white" />
                     ) : (
-                      <Bot className="h-4 w-4 text-white" />
+                      <FontAwesomeIcon icon={faRobot} className="h-4 w-4 text-gray-800" />
                     )}
                   </div>
                   <div className={`rounded-2xl px-4 py-3 ${
                     message.role === 'user'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-100 text-gray-800'
+                      ? 'bg-brand-red text-white'
+                      : 'bg-gray-50 text-gray-800 border border-gray-200'
                   }`}>
                     {message.role === 'bot' ? (
                       <div className="markdown-content">
@@ -254,7 +307,7 @@ export default function ChatbotPage() {
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                     )}
                     <p className={`text-xs mt-2 ${
-                      message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
+                      message.role === 'user' ? 'text-red-100' : 'text-gray-500'
                     }`}>
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
@@ -266,10 +319,10 @@ export default function ChatbotPage() {
             {isLoading && (
               <div className="flex justify-start animate-slide-up">
                 <div className="flex items-start space-x-3 max-w-[80%]">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-                    <Bot className="h-4 w-4 text-white" />
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-yellow flex items-center justify-center">
+                    <FontAwesomeIcon icon={faRobot} className="h-4 w-4 text-gray-800" />
                   </div>
-                  <div className="bg-gray-100 rounded-2xl px-4 py-3">
+                  <div className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
                     <div className="typing-indicator">
                       <div className="typing-dot animation-delay-0"></div>
                       <div className="typing-dot animation-delay-200"></div>
@@ -290,7 +343,7 @@ export default function ChatbotPage() {
                 {messages.length > 1 && (
                   <button
                     onClick={() => setShowPrompts(false)}
-                    className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                    className="text-xs text-gray-500 hover:text-brand-red transition-colors"
                   >
                     Hide
                   </button>
@@ -304,12 +357,12 @@ export default function ChatbotPage() {
                       handlePredefinedPrompt(item.prompt)
                       setShowPrompts(false)
                     }}
-                    className="flex items-center space-x-2 p-3 text-left bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors duration-200 border border-transparent hover:border-blue-200 group"
+                    className="flex items-center space-x-2 p-3 text-left bg-gray-50 hover:bg-brand-yellow/20 rounded-lg transition-colors duration-200 border border-gray-200 hover:border-brand-yellow group"
                   >
-                    <span className="text-lg group-hover:scale-110 transition-transform duration-200">
-                      {item.icon}
-                    </span>
-                    <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700">
+                    <div className="text-lg group-hover:scale-110 transition-transform duration-200 text-brand-red">
+                      <FontAwesomeIcon icon={item.icon} className="h-5 w-5" />
+                    </div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-brand-red">
                       {item.title}
                     </span>
                   </button>
@@ -327,7 +380,7 @@ export default function ChatbotPage() {
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="Ask me anything about your hackathon project..."
-                  className="w-full resize-none border border-gray-300 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full resize-none border border-gray-300 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
                   rows={1}
                   style={{ minHeight: '44px', maxHeight: '120px' }}
                 />
@@ -335,18 +388,18 @@ export default function ChatbotPage() {
               {messages.length > 1 && !showPrompts && (
                 <button
                   onClick={() => setShowPrompts(true)}
-                  className="bg-gray-100 text-gray-600 p-3 rounded-xl hover:bg-gray-200 transition-all duration-200 shadow-sm hover:shadow-md"
+                  className="bg-brand-yellow/20 text-brand-red p-3 rounded-xl hover:bg-brand-yellow/30 transition-all duration-200 shadow-sm hover:shadow-md border border-brand-yellow"
                   title="Show quick prompts"
                 >
-                  <Lightbulb className="h-5 w-5" />
+                  <FontAwesomeIcon icon={faLightbulb} className="h-5 w-5" />
                 </button>
               )}
               <button
                 onClick={sendMessage}
                 disabled={!inputMessage.trim() || isLoading}
-                className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-3 rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                className="bg-gradient-to-r from-brand-red to-brand-red/90 text-white p-3 rounded-xl hover:from-brand-red/90 hover:to-brand-red transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
               >
-                <Send className="h-5 w-5" />
+                <FontAwesomeIcon icon={faPaperPlane} className="h-5 w-5" />
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">
@@ -356,14 +409,7 @@ export default function ChatbotPage() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-4">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-gray-600">
-            Wells Fargo | CCPMT <code className="bg-gray-100 px-2 py-1 rounded"></code> 
-          </p>
-        </div>
-      </footer>
+     
     </div>
   )
 }

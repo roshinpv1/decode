@@ -1,8 +1,14 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Open_Sans } from 'next/font/google'
 import './globals.css'
+import '../lib/fontawesome'
 
 const inter = Inter({ subsets: ['latin'] })
+const openSans = Open_Sans({ 
+  subsets: ['latin'],
+  variable: '--font-open-sans',
+  display: 'swap'
+})
 
 export const metadata: Metadata = {
   title: 'Hackathon Chatbot',
@@ -16,7 +22,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={`${inter.className} ${openSans.variable}`}>{children}</body>
     </html>
   )
 }

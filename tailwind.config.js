@@ -7,8 +7,19 @@ module.exports = {
   ],
   theme: {
     extend: {
+      colors: {
+        'brand': {
+          'red': '#d71e28',
+          'yellow': '#ffcd41',
+          'white': '#ffffff',
+        },
+        'primary': '#d71e28',
+        'secondary': '#ffcd41',
+        'accent': '#ffffff',
+      },
       fontFamily: {
         'helvetica': ['Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
+        'open-sans': ['var(--font-open-sans)', 'sans-serif'],
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in-out',

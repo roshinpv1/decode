@@ -64,6 +64,6 @@ decode/
 
 - **Framework**: Next.js 14 with App Router
 - **Styling**: Tailwind CSS
-- **Icons**: Lucide React
+- **Icons**: Font Awesome
 - **AI Backend**: LM Studio (local inference)
 - **Language**: TypeScript
