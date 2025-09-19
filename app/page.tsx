@@ -13,9 +13,6 @@ import {
   faTrophy,
   faWrench,
   faClock,
-  faComments,
-  faUsers,
-  faChartLine,
   faMicrophone,
   faMicrophoneSlash,
   faStop,
@@ -25,9 +22,12 @@ import {
   faBullhorn,
   faCalendar,
   faExclamationTriangle,
-  faInfoCircle
+  faInfoCircle,
+  faTimes,
+  faHistory
 } from '@fortawesome/free-solid-svg-icons'
 import Image from 'next/image'
+import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -51,13 +51,6 @@ export default function ChatbotPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPrompts, setShowPrompts] = useState(false)
   const [timeLeft, setTimeLeft] = useState('')
-  const [metrics, setMetrics] = useState({
-    totalMessages: 0,
-    activeUsers: 1,
-    avgResponseTime: 0,
-    sessionDuration: 0
-  })
-  const [sessionStart] = useState(new Date())
   const [userInfo, setUserInfo] = useState({
     ipAddress: '',
     sessionId: '',
@@ -68,10 +61,18 @@ export default function ChatbotPage() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [isRecording, setIsRecording] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
-  const [showLeaderboard, setShowLeaderboard] = useState(false)
-  const [showEvents, setShowEvents] = useState(false)
-  const [leaderboard, setLeaderboard] = useState<any[]>([])
-  const [events, setEvents] = useState<any[]>([])
+  const [showRegistration, setShowRegistration] = useState(false)
+  const [hasProfile, setHasProfile] = useState(false)
+  const [profileData, setProfileData] = useState<any>(null)
+  const [registrationForm, setRegistrationForm] = useState({
+    userName: '',
+    teamName: '',
+    email: '',
+    role: ''
+  })
+  const [loadHistory, setLoadHistory] = useState(true)
+  const [showAdminCodeModal, setShowAdminCodeModal] = useState(false)
+  const [adminCode, setAdminCode] = useState('')
   const recognitionRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -244,36 +245,85 @@ export default function ChatbotPage() {
     return processedText
   }
 
-  // Fetch leaderboard data
-  const fetchLeaderboard = async () => {
+
+  // Check if user has a profile
+  const checkUserProfile = async () => {
     try {
-      const response = await fetch('/api/leaderboard?limit=10')
+      const response = await fetch('/api/profile')
       const data = await response.json()
-      setLeaderboard(data.leaderboard || [])
-      console.log('📊 Leaderboard loaded:', data.leaderboard?.length || 0, 'teams')
+      
+      if (data.hasProfile && data.profile) {
+        setHasProfile(true)
+        setProfileData(data.profile)
+        setShowRegistration(false)
+        console.log('👤 User profile found:', data.profile.user_name, '-', data.profile.team_name)
+      } else {
+        setHasProfile(false)
+        setShowRegistration(true)
+        console.log('👤 No user profile found, showing registration')
+      }
     } catch (error) {
-      console.error('Failed to fetch leaderboard:', error)
-      setLeaderboard([])
+      console.error('Failed to check user profile:', error)
+      setShowRegistration(true)
     }
   }
 
-  // Fetch events data
-  const fetchEvents = async () => {
+  // Create user profile
+  const createUserProfile = async () => {
+    if (!registrationForm.userName.trim() || !registrationForm.teamName.trim()) {
+      alert('Please enter both your name and team name')
+      return
+    }
+
     try {
-      const response = await fetch('/api/events?type=active&limit=10')
+      const response = await fetch('/api/profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'create',
+          userName: registrationForm.userName.trim(),
+          teamName: registrationForm.teamName.trim(),
+          email: registrationForm.email.trim() || undefined,
+          role: registrationForm.role.trim() || undefined
+        }),
+      })
+
       const data = await response.json()
-      setEvents(data.events || [])
-      console.log('📢 Events loaded:', data.events?.length || 0, 'events')
+
+      if (data.success) {
+        setHasProfile(true)
+        setProfileData(data.profile)
+        setShowRegistration(false)
+        console.log('👤 Profile created successfully:', data.profile.user_name)
+        
+        // Update userInfo with the profile data
+        setUserInfo(prev => ({
+          ...prev,
+          displayName: `${data.profile.user_name} (${data.profile.team_name})`
+        }))
+      } else {
+        alert('Failed to create profile: ' + data.error)
+      }
     } catch (error) {
-      console.error('Failed to fetch events:', error)
-      setEvents([])
+      console.error('Failed to create profile:', error)
+      alert('Failed to create profile. Please try again.')
     }
   }
 
   // Load chat history from database (always IP-based)
-  const loadChatHistory = async () => {
+  const loadChatHistory = async (shouldLoad: boolean = loadHistory) => {
     try {
       setIsLoadingHistory(true)
+      
+      if (!shouldLoad) {
+        console.log('📜 Skipping chat history load (user preference)')
+        setMessages([])
+        setIsLoadingHistory(false)
+        return
+      }
+      
       // Always load by IP address, not sessionId
       const response = await fetch('/api/chat/history')
       const data = await response.json()
@@ -298,6 +348,34 @@ export default function ChatbotPage() {
     } finally {
       setIsLoadingHistory(false)
     }
+  }
+
+  // Handle history loading preference change
+  const handleHistoryToggle = async (shouldLoad: boolean) => {
+    setLoadHistory(shouldLoad)
+    await loadChatHistory(shouldLoad)
+  }
+
+  // Handle admin access
+  const handleAdminAccess = () => {
+    setShowAdminCodeModal(true)
+  }
+
+  const verifyAdminCode = () => {
+    if (adminCode === '7887') {
+      setShowAdminCodeModal(false)
+      setAdminCode('')
+      // Navigate to admin page
+      window.location.href = '/admin'
+    } else {
+      alert('Invalid admin code. Please try again.')
+      setAdminCode('')
+    }
+  }
+
+  const closeAdminModal = () => {
+    setShowAdminCodeModal(false)
+    setAdminCode('')
   }
 
   // Get IP and session info
@@ -368,15 +446,14 @@ export default function ChatbotPage() {
       console.log('User Info Detected:', info)
       
       // Load chat history after getting user info (IP-based)
-      await loadChatHistory()
+      await loadChatHistory(loadHistory)
     }
     
     // Initialize speech recognition
     initializeSpeechRecognition()
     
-    // Load leaderboard and events data
-    fetchLeaderboard()
-    fetchEvents()
+    // Check user profile first
+    checkUserProfile()
     
     initializeUser()
     
@@ -423,32 +500,6 @@ export default function ChatbotPage() {
     return () => clearInterval(timer)
   }, [])
 
-  // Update metrics in real-time
-  useEffect(() => {
-    const updateMetrics = () => {
-      const userMessages = messages.filter(m => m.role === 'user')
-      const botMessages = messages.filter(m => m.role === 'bot')
-      
-      // Calculate average response time (simulated for demo)
-      const avgResponseTime = botMessages.length > 0 ? 
-        Math.floor(Math.random() * 2000) + 500 : 0 // 500-2500ms
-      
-      // Calculate session duration in minutes
-      const sessionDuration = Math.floor((new Date().getTime() - sessionStart.getTime()) / (1000 * 60))
-      
-      setMetrics({
-        totalMessages: messages.length - 1, // Exclude initial bot message
-        activeUsers: Math.floor(Math.random() * 15) + 5, // Simulated 5-20 active users
-        avgResponseTime,
-        sessionDuration
-      })
-    }
-
-    updateMetrics()
-    const metricsTimer = setInterval(updateMetrics, 5000) // Update every 5 seconds
-
-    return () => clearInterval(metricsTimer)
-  }, [messages, sessionStart])
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
@@ -481,7 +532,16 @@ export default function ChatbotPage() {
         }),
       })
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
       const data = await response.json()
+
+      // Check if the API returned an error
+      if (data.error) {
+        throw new Error(data.message || 'API returned an error')
+      }
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -493,9 +553,26 @@ export default function ChatbotPage() {
       setMessages(prev => [...prev, botMessage])
     } catch (error) {
       console.error('Error sending message:', error)
+      
+      let errorText = 'Sorry, I encountered an error. '
+      
+      if (error instanceof Error) {
+        if (error.message.includes('fetch')) {
+          errorText += 'Unable to connect to the server. Please check your connection and try again.'
+        } else if (error.message.includes('LM Studio') || error.message.includes('AI service')) {
+          errorText += error.message
+        } else if (error.message.includes('HTTP error')) {
+          errorText += 'Server error occurred. Please try again.'
+        } else {
+          errorText += 'Please make sure LM Studio is running on localhost:1234 with a model loaded.'
+        }
+      } else {
+        errorText += 'Please make sure LM Studio is running and try again.'
+      }
+      
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: 'Sorry, I encountered an error. Please make sure LM Studio is running and try again.',
+        content: errorText,
         role: 'bot',
         timestamp: new Date()
       }
@@ -562,13 +639,13 @@ export default function ChatbotPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="flex-shrink-0">
-                
               </div>
                   <div>
                     <h1 className="text-3xl font-open-sans  text-[#d71e28] tracking-tight">Hackathon Bot</h1>
                     <p className="text-sm text-gray-700 font-medium">
-                      Let the hacking begin! 
-                      {userInfo.displayName ? (
+                      {profileData ? (
+                        <span className="text-brand-red ml-2">Welcome, {profileData.user_name}! ({profileData.team_name})</span>
+                      ) : userInfo.displayName ? (
                         <span className="text-brand-red ml-2">
                           Welcome, {userInfo.displayName}! {userInfo.location && `(${userInfo.location})`}
                         </span>
@@ -582,19 +659,31 @@ export default function ChatbotPage() {
             </div>
             
             <div className="flex items-center space-x-6">
-              {/* Mini Metrics Panel */}
-              <div className="hidden lg:flex items-center space-x-4 text-gray-600">
-                <div className="flex items-center space-x-1" title="Total messages in this session">
-                  <FontAwesomeIcon icon={faComments} className="h-3 w-3" />
-                  <span className="text-xs font-medium">{metrics.totalMessages}</span>
-                </div>
-                <div className="flex items-center space-x-1" title="Active users online">
-                  <FontAwesomeIcon icon={faUsers} className="h-3 w-3" />
-                  <span className="text-xs font-medium">{metrics.activeUsers}</span>
-                </div>
-                <div className="flex items-center space-x-1" title="Average response time">
-                  <FontAwesomeIcon icon={faChartLine} className="h-3 w-3" />
-                  <span className="text-xs font-medium">{metrics.avgResponseTime}ms</span>
+              {/* Navigation Menu */}
+              <div className="flex items-center space-x-1">
+                <Link href="/leaderboard">
+                  <div className="group flex flex-col items-center justify-center px-4 py-2 rounded-lg hover:bg-gray-50 transition-all duration-200 cursor-pointer min-w-[80px]">
+                    <FontAwesomeIcon 
+                      icon={faTrophy} 
+                      className="h-5 w-5 text-brand-red group-hover:text-red-600 transition-colors duration-200 mb-1" 
+                    />
+                    <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900 transition-colors duration-200">
+                      Leaderboard
+                    </span>
+                  </div>
+                </Link>
+                
+                <div 
+                  onClick={handleAdminAccess}
+                  className="group flex flex-col items-center justify-center px-4 py-2 rounded-lg hover:bg-gray-50 transition-all duration-200 cursor-pointer min-w-[80px]"
+                >
+                  <FontAwesomeIcon 
+                    icon={faWrench} 
+                    className="h-5 w-5 text-brand-red group-hover:text-red-600 transition-colors duration-200 mb-1" 
+                  />
+                  <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900 transition-colors duration-200">
+                    Admin
+                  </span>
                 </div>
               </div>
 
@@ -610,6 +699,143 @@ export default function ChatbotPage() {
           </div>
         </div>
       </header>
+
+      {/* Admin Code Modal */}
+      {showAdminCodeModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-fade-in">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FontAwesomeIcon icon={faWrench} className="h-8 w-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Admin Access</h2>
+              <p className="text-gray-600 mt-2">Enter the admin code to continue</p>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <input
+                  type="password"
+                  value={adminCode}
+                  onChange={(e) => setAdminCode(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && verifyAdminCode()}
+                  placeholder="Enter admin code"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-center text-lg tracking-wider"
+                  maxLength={4}
+                  autoFocus
+                />
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={closeAdminModal}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={verifyAdminCode}
+                  disabled={!adminCode.trim()}
+                  className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Access Admin
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Registration Modal */}
+      {showRegistration && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-fade-in">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-brand-red to-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FontAwesomeIcon icon={faUser} className="h-8 w-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Hackathon Bot!</h2>
+              <p className="text-gray-600">Let's get to know you and your team</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Your Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={registrationForm.userName}
+                  onChange={(e) => setRegistrationForm(prev => ({ ...prev, userName: e.target.value }))}
+                  placeholder="Enter your full name"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Team Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={registrationForm.teamName}
+                  onChange={(e) => setRegistrationForm(prev => ({ ...prev, teamName: e.target.value }))}
+                  placeholder="Enter your team name"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email (Optional)
+                </label>
+                <input
+                  type="email"
+                  value={registrationForm.email}
+                  onChange={(e) => setRegistrationForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="your.email@company.com"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Role (Optional)
+                </label>
+                <select
+                  value={registrationForm.role}
+                  onChange={(e) => setRegistrationForm(prev => ({ ...prev, role: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-brand-red"
+                >
+                  <option value="">Select your role</option>
+                  <option value="Developer">Developer</option>
+                  <option value="Designer">Designer</option>
+                  <option value="Data Scientist">Data Scientist</option>
+                  <option value="Product Manager">Product Manager</option>
+                  <option value="DevOps Engineer">DevOps Engineer</option>
+                  <option value="Business Analyst">Business Analyst</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4">
+              <button
+                onClick={createUserProfile}
+                disabled={!registrationForm.userName.trim() || !registrationForm.teamName.trim()}
+                className="w-full bg-gradient-to-r from-brand-red to-red-600 text-white py-3 px-6 rounded-xl font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+              >
+                Start Hacking! 🚀
+              </button>
+              
+              <p className="text-xs text-gray-500 text-center mt-3">
+                This information is stored locally and associated with your IP address
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chat Messages */}
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pt-24">
@@ -900,6 +1126,26 @@ export default function ChatbotPage() {
                   />
                 </button>
               )}
+              
+              {/* Load History Toggle Button */}
+              <button
+                onClick={() => handleHistoryToggle(!loadHistory)}
+                className={`group relative w-12 h-12 rounded-xl transition-all duration-200 ${
+                  loadHistory 
+                    ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+                }`}
+                title={loadHistory ? "History loaded (click to start fresh)" : "History disabled (click to load)"}
+              >
+                <FontAwesomeIcon 
+                  icon={faHistory} 
+                  className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" 
+                />
+                {loadHistory && (
+                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-300 rounded-full"></div>
+                )}
+              </button>
+              
               <button
                 onClick={sendMessage}
                 disabled={!inputMessage.trim() || isLoading}
@@ -934,7 +1180,6 @@ export default function ChatbotPage() {
           </div>
         </div>
       </main>
-
      
     </div>
   )
