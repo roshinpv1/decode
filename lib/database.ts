@@ -21,6 +21,31 @@ export interface ChatSession {
   message_count: number
 }
 
+export interface Team {
+  id: number
+  team_name: string
+  members: string
+  project_name?: string
+  project_description?: string
+  github_repo?: string
+  score: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Event {
+  id: number
+  title: string
+  description: string
+  event_type: 'announcement' | 'schedule_change' | 'deadline' | 'info'
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  start_time?: string
+  end_time?: string
+  is_active: boolean
+  created_at: string
+  created_by: string
+}
+
 class ChatDatabase {
   private db: Database.Database
 
@@ -71,12 +96,46 @@ class ChatDatabase {
       )
     `)
 
+    // Create teams table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS teams (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        team_name TEXT UNIQUE NOT NULL,
+        members TEXT NOT NULL,
+        project_name TEXT,
+        project_description TEXT,
+        github_repo TEXT,
+        score INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    // Create events table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        event_type TEXT CHECK(event_type IN ('announcement', 'schedule_change', 'deadline', 'info')) DEFAULT 'info',
+        priority TEXT CHECK(priority IN ('low', 'medium', 'high', 'urgent')) DEFAULT 'medium',
+        start_time DATETIME,
+        end_time DATETIME,
+        is_active BOOLEAN DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT DEFAULT 'system'
+      )
+    `)
+
     // Create indexes for better performance
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_messages_ip ON chat_messages(ip_address);
       CREATE INDEX IF NOT EXISTS idx_messages_session ON chat_messages(session_id);
       CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON chat_messages(timestamp);
       CREATE INDEX IF NOT EXISTS idx_sessions_ip ON chat_sessions(ip_address);
+      CREATE INDEX IF NOT EXISTS idx_teams_score ON teams(score DESC);
+      CREATE INDEX IF NOT EXISTS idx_events_active ON events(is_active, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_events_priority ON events(priority, created_at DESC);
     `)
 
     console.log('✅ Database tables initialized')
@@ -190,6 +249,85 @@ class ChatDatabase {
   // Close database connection
   close() {
     this.db.close()
+  }
+
+  // Team management methods
+  createTeam(teamName: string, members: string, projectName?: string, projectDescription?: string): number {
+    const stmt = this.db.prepare(`
+      INSERT INTO teams (team_name, members, project_name, project_description)
+      VALUES (?, ?, ?, ?)
+    `)
+    const result = stmt.run(teamName, members, projectName || null, projectDescription || null)
+    return result.lastInsertRowid as number
+  }
+
+  updateTeamScore(teamId: number, score: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE teams SET score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `)
+    stmt.run(score, teamId)
+  }
+
+  getLeaderboard(limit: number = 10): Team[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM teams 
+      ORDER BY score DESC, updated_at ASC 
+      LIMIT ?
+    `)
+    return stmt.all(limit) as Team[]
+  }
+
+  // Event management methods
+  createEvent(
+    title: string, 
+    description: string, 
+    eventType: string = 'info',
+    priority: string = 'medium',
+    startTime?: string,
+    endTime?: string,
+    createdBy: string = 'system'
+  ): number {
+    const stmt = this.db.prepare(`
+      INSERT INTO events (title, description, event_type, priority, start_time, end_time, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `)
+    const result = stmt.run(title, description, eventType, priority, startTime || null, endTime || null, createdBy)
+    return result.lastInsertRowid as number
+  }
+
+  getActiveEvents(limit: number = 20): Event[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM events 
+      WHERE is_active = 1 
+      ORDER BY 
+        CASE priority 
+          WHEN 'urgent' THEN 1 
+          WHEN 'high' THEN 2 
+          WHEN 'medium' THEN 3 
+          WHEN 'low' THEN 4 
+        END,
+        created_at DESC
+      LIMIT ?
+    `)
+    return stmt.all(limit) as Event[]
+  }
+
+  getRecentEvents(hours: number = 24, limit: number = 10): Event[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM events 
+      WHERE is_active = 1 
+        AND created_at > datetime('now', '-' || ? || ' hours')
+      ORDER BY created_at DESC
+      LIMIT ?
+    `)
+    return stmt.all(hours, limit) as Event[]
+  }
+
+  deactivateEvent(eventId: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE events SET is_active = 0 WHERE id = ?
+    `)
+    stmt.run(eventId)
   }
 
   // Get database instance for custom queries

@@ -182,7 +182,7 @@ FAQs for Participants
 Response Guidelines
 
 * Keep answers short (2-3 sentences) unless more detail is requested.
-* Use bullet points for steps, features, or comparisons.
+
 * Reference official documentation/resources whenever possible.
 * Encourage participants to ask follow-up questions.
 

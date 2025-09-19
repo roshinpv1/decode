@@ -15,7 +15,17 @@ import {
   faClock,
   faComments,
   faUsers,
-  faChartLine
+  faChartLine,
+  faMicrophone,
+  faMicrophoneSlash,
+  faStop,
+  faCrown,
+  faMedal,
+  faAward,
+  faBullhorn,
+  faCalendar,
+  faExclamationTriangle,
+  faInfoCircle
 } from '@fortawesome/free-solid-svg-icons'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
@@ -56,18 +66,216 @@ export default function ChatbotPage() {
     location: ''
   })
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
+  const [isRecording, setIsRecording] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(false)
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const [showEvents, setShowEvents] = useState(false)
+  const [leaderboard, setLeaderboard] = useState<any[]>([])
+  const [events, setEvents] = useState<any[]>([])
+  const recognitionRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  // Load chat history from database
-  const loadChatHistory = async (sessionId?: string) => {
+  // Initialize speech recognition
+  const initializeSpeechRecognition = () => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      
+      if (SpeechRecognition) {
+        setSpeechSupported(true)
+        const recognition = new SpeechRecognition()
+        
+        // Configure recognition settings
+        recognition.continuous = true
+        recognition.interimResults = true
+        recognition.lang = 'en-US'
+        
+        // Handle results
+        recognition.onresult = (event: any) => {
+          let finalTranscript = ''
+          let interimTranscript = ''
+          
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript
+            } else {
+              interimTranscript += transcript
+            }
+          }
+          
+          if (finalTranscript) {
+            setInputMessage(prev => prev + finalTranscript + ' ')
+          }
+        }
+        
+        // Handle errors
+        recognition.onerror = (event: any) => {
+          console.error('Speech recognition error:', event.error)
+          setIsRecording(false)
+          
+          if (event.error === 'not-allowed') {
+            alert('Microphone access denied. Please enable microphone permissions in your browser.')
+          } else if (event.error === 'no-speech') {
+            console.log('No speech detected')
+          } else {
+            alert(`Speech recognition error: ${event.error}`)
+          }
+        }
+        
+        // Handle end
+        recognition.onend = () => {
+          setIsRecording(false)
+        }
+        
+        recognition.onstart = () => {
+          setIsRecording(true)
+        }
+        
+        recognitionRef.current = recognition
+      } else {
+        setSpeechSupported(false)
+        console.log('Speech recognition not supported in this browser')
+      }
+    }
+  }
+
+  // Start voice recording
+  const startRecording = () => {
+    if (recognitionRef.current && speechSupported) {
+      try {
+        recognitionRef.current.start()
+      } catch (error) {
+        console.error('Error starting speech recognition:', error)
+        setIsRecording(false)
+      }
+    }
+  }
+
+  // Stop voice recording
+  const stopRecording = () => {
+    if (recognitionRef.current && isRecording) {
+      recognitionRef.current.stop()
+    }
+  }
+
+  // Toggle recording
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording()
+    } else {
+      startRecording()
+    }
+  }
+
+  // Function to automatically linkify URLs in text
+  const linkifyText = (text: string) => {
+    // Enhanced URL regex to catch more patterns
+    const urlRegex = /(https?:\/\/[^\s<>\"{}|\\^`\[\]]+)/g
+    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g
+    const phoneRegex = /\b(\+?1?[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g
+    
+    let processedText = text
+    
+    // First, handle emails
+    processedText = processedText.replace(emailRegex, (email) => {
+      // Check if already in markdown format
+      const beforeEmail = processedText.substring(0, processedText.indexOf(email))
+      if (beforeEmail.endsWith('](') || beforeEmail.endsWith('[') || beforeEmail.includes(`[${email}]`)) {
+        return email
+      }
+      return `[${email}](mailto:${email})`
+    })
+    
+    // Then handle phone numbers
+    processedText = processedText.replace(phoneRegex, (phone) => {
+      // Check if already in markdown format
+      const beforePhone = processedText.substring(0, processedText.indexOf(phone))
+      if (beforePhone.endsWith('](') || beforePhone.endsWith('[') || beforePhone.includes(`[${phone}]`)) {
+        return phone
+      }
+      const cleanPhone = phone.replace(/[^\d+]/g, '')
+      return `[${phone}](tel:${cleanPhone})`
+    })
+    
+    // Finally, handle URLs
+    processedText = processedText.replace(urlRegex, (url) => {
+      // Remove trailing punctuation that might not be part of URL
+      const cleanUrl = url.replace(/[.,;:!?]+$/, '')
+      const trailingPunct = url.substring(cleanUrl.length)
+      
+      // Check if URL is already in markdown format
+      const beforeUrl = processedText.substring(0, processedText.indexOf(url))
+      if (beforeUrl.endsWith('](') || beforeUrl.endsWith('[') || beforeUrl.includes(`[${cleanUrl}]`)) {
+        return url
+      }
+      
+      // Create a user-friendly display text
+      let displayText = 'Click here'
+      try {
+        const urlObj = new URL(cleanUrl)
+        const domain = urlObj.hostname.replace('www.', '')
+        
+        // Use different display text based on domain
+        if (domain.includes('github.com')) {
+          displayText = 'View on GitHub'
+        } else if (domain.includes('stackoverflow.com')) {
+          displayText = 'View on Stack Overflow'
+        } else if (domain.includes('docs.') || domain.includes('documentation')) {
+          displayText = 'View documentation'
+        } else if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
+          displayText = 'Watch video'
+        } else if (cleanUrl.length > 50) {
+          displayText = `Visit ${domain}`
+        } else {
+          displayText = domain
+        }
+      } catch {
+        // If URL parsing fails, use a generic display
+        displayText = cleanUrl.length > 40 ? 'Click here' : cleanUrl
+      }
+      
+      return `[${displayText}](${cleanUrl})${trailingPunct}`
+    })
+    
+    return processedText
+  }
+
+  // Fetch leaderboard data
+  const fetchLeaderboard = async () => {
+    try {
+      const response = await fetch('/api/leaderboard?limit=10')
+      const data = await response.json()
+      setLeaderboard(data.leaderboard || [])
+      console.log('📊 Leaderboard loaded:', data.leaderboard?.length || 0, 'teams')
+    } catch (error) {
+      console.error('Failed to fetch leaderboard:', error)
+      setLeaderboard([])
+    }
+  }
+
+  // Fetch events data
+  const fetchEvents = async () => {
+    try {
+      const response = await fetch('/api/events?type=active&limit=10')
+      const data = await response.json()
+      setEvents(data.events || [])
+      console.log('📢 Events loaded:', data.events?.length || 0, 'events')
+    } catch (error) {
+      console.error('Failed to fetch events:', error)
+      setEvents([])
+    }
+  }
+
+  // Load chat history from database (always IP-based)
+  const loadChatHistory = async () => {
     try {
       setIsLoadingHistory(true)
-      const url = sessionId ? `/api/chat/history?sessionId=${sessionId}` : '/api/chat/history'
-      const response = await fetch(url)
+      // Always load by IP address, not sessionId
+      const response = await fetch('/api/chat/history')
       const data = await response.json()
       
       if (data.messages && data.messages.length > 0) {
@@ -159,11 +367,25 @@ export default function ChatbotPage() {
       setUserInfo(info)
       console.log('User Info Detected:', info)
       
-      // Load chat history after getting user info
-      await loadChatHistory(info.sessionId)
+      // Load chat history after getting user info (IP-based)
+      await loadChatHistory()
     }
     
+    // Initialize speech recognition
+    initializeSpeechRecognition()
+    
+    // Load leaderboard and events data
+    fetchLeaderboard()
+    fetchEvents()
+    
     initializeUser()
+    
+    // Cleanup function
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
+    }
   }, [])
 
   // Countdown timer logic
@@ -231,6 +453,11 @@ export default function ChatbotPage() {
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
 
+    // Stop voice recording if active
+    if (isRecording) {
+      stopRecording()
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       content: inputMessage,
@@ -281,6 +508,10 @@ export default function ChatbotPage() {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      // Stop voice recording if active before sending
+      if (isRecording) {
+        stopRecording()
+      }
       sendMessage()
     }
   }
@@ -479,10 +710,63 @@ export default function ChatbotPage() {
                               <blockquote className="border-l-4 border-blue-400 pl-4 italic text-gray-700 mb-2">
                                 {children}
                               </blockquote>
-                            )
+                            ),
+                            a: ({ children, href }) => {
+                              const isExternalLink = href?.startsWith('http')
+                              const isEmail = href?.startsWith('mailto:')
+                              const isPhoneNumber = href?.startsWith('tel:')
+                              
+                              // Smart display text handling
+                              let displayText = children
+                              let linkType = ''
+                              
+                              if (typeof children === 'string') {
+                                if (children.length > 60) {
+                                  // For very long URLs, show domain + "click here"
+                                  try {
+                                    const urlObj = new URL(href || '')
+                                    const domain = urlObj.hostname.replace('www.', '')
+                                    displayText = `${domain} (click here)`
+                                  } catch {
+                                    displayText = `${children.substring(0, 40)}... (click here)`
+                                  }
+                                } else if (children.length > 40) {
+                                  displayText = `${children.substring(0, 30)}...`
+                                }
+                              }
+                              
+                              if (isExternalLink) linkType = '↗'
+                              if (isEmail) linkType = '✉'
+                              if (isPhoneNumber) linkType = '📞'
+                              
+                              return (
+                                <a
+                                  href={href}
+                                  target={isExternalLink ? '_blank' : '_self'}
+                                  rel={isExternalLink ? 'noopener noreferrer' : undefined}
+                                  className={`
+                                    ${isExternalLink ? 'text-blue-600 hover:text-blue-800' : ''}
+                                    ${isEmail ? 'text-green-600 hover:text-green-800' : ''}
+                                    ${isPhoneNumber ? 'text-purple-600 hover:text-purple-800' : ''}
+                                    ${!isExternalLink && !isEmail && !isPhoneNumber ? 'text-blue-600 hover:text-blue-800' : ''}
+                                    underline decoration-current/30 hover:decoration-current 
+                                    transition-colors duration-200 break-words
+                                    hover:bg-blue-50 px-1 py-0.5 rounded
+                                  `}
+                                  title={`${linkType} ${href}`}
+                                >
+                                  {displayText}
+                                  {linkType && (
+                                    <span className="inline-block ml-1 text-xs opacity-70">
+                                      {linkType}
+                                    </span>
+                                  )}
+                                </a>
+                              )
+                            }
                           }}
                         >
-                          {message.content}
+                          {linkifyText(message.content)}
                         </ReactMarkdown>
                       </div>
                     ) : (
@@ -584,25 +868,68 @@ export default function ChatbotPage() {
                   style={{ minHeight: '44px', maxHeight: '120px' }}
                 />
               </div>
+              {speechSupported && (
+                <button
+                  onClick={toggleRecording}
+                  disabled={isLoading}
+                  className={`group relative w-12 h-12 rounded-xl transition-all duration-200 ${
+                    isRecording 
+                      ? 'bg-red-500 text-white hover:bg-red-600' 
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  title={isRecording ? "Stop recording" : "Start voice input"}
+                >
+                  <FontAwesomeIcon 
+                    icon={isRecording ? faStop : faMicrophone} 
+                    className="h-4 w-4 transition-all duration-200" 
+                  />
+                  {isRecording && (
+                    <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-300 rounded-full animate-pulse"></div>
+                  )}
+                </button>
+              )}
               {messages.length > 1 && !showPrompts && (
                 <button
                   onClick={() => setShowPrompts(true)}
-                  className="bg-brand-yellow/20 text-brand-red p-3 rounded-xl hover:bg-brand-yellow/30 transition-all duration-200 shadow-sm hover:shadow-md border border-brand-yellow"
+                  className="group relative w-12 h-12 rounded-xl bg-brand-yellow/15 text-brand-red hover:bg-brand-yellow/25 border border-brand-yellow/20 transition-all duration-200"
                   title="Show quick prompts"
                 >
-                  <FontAwesomeIcon icon={faLightbulb} className="h-5 w-5" />
+                  <FontAwesomeIcon 
+                    icon={faLightbulb} 
+                    className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" 
+                  />
                 </button>
               )}
               <button
                 onClick={sendMessage}
                 disabled={!inputMessage.trim() || isLoading}
-                className="bg-gradient-to-r from-brand-red to-brand-red/90 text-white p-3 rounded-xl hover:from-brand-red/90 hover:to-brand-red transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                className={`group relative w-12 h-12 rounded-xl transition-all duration-200 ${
+                  inputMessage.trim() && !isLoading
+                    ? 'bg-brand-red text-white hover:bg-red-600'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
               >
-                <FontAwesomeIcon icon={faPaperPlane} className="h-5 w-5" />
+                <FontAwesomeIcon 
+                  icon={faPaperPlane} 
+                  className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" 
+                />
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">
-              Press Enter to send • Shift + Enter for new line
+              {isRecording ? (
+                <span className="text-red-500 font-medium animate-pulse">
+                  🎤 Recording... Click microphone to stop
+                </span>
+              ) : (
+                <>
+                  Press Enter to send • Shift + Enter for new line
+                  {speechSupported && (
+                    <span className="block sm:inline sm:ml-2">
+                      • Click 🎤 for voice input
+                    </span>
+                  )}
+                </>
+              )}
             </p>
           </div>
         </div>

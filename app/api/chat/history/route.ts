@@ -38,13 +38,11 @@ export async function GET(request: NextRequest) {
     
     let chatHistory
     
-    if (sessionId) {
-      // Get history for specific session
-      chatHistory = db.getSessionHistory(sessionId, limit)
-    } else {
-      // Get history for IP address
-      chatHistory = db.getChatHistory(clientIP, limit)
-    }
+    // Always get history for IP address (not session-specific)
+    // This ensures all browsers from same IP see the same chat history
+    chatHistory = db.getChatHistory(clientIP, limit)
+    
+    console.log(`📜 Loading history for IP: ${clientIP}, found ${chatHistory.length} messages`)
     
     // Convert database format to frontend format
     const messages = chatHistory.reverse().map(msg => ({
