@@ -3,6 +3,8 @@ import { writeFile, appendFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
 import { getDatabase } from '../../../lib/database'
+import { callLLM, getGlobalClientInfo, createLLMClientFromEnv } from '../../../lib/llm-factory'
+import { LLMError } from '../../../lib/llm-types'
 
 // Helper function to get client IP address
 function getClientIP(request: NextRequest): string {
@@ -120,38 +122,73 @@ export async function POST(request: NextRequest) {
     // Get system prompt from database (with fallback to default)
     const systemPrompt = db.getSystemPrompt('default')
 
-    // LM Studio typically runs on localhost:1234 by default
-    const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234/v1/chat/completions'
+    // Create full prompt with system prompt and user message
+    const fullPrompt = `${systemPrompt}\n\nUser: ${message}\n\nAssistant:`
 
-    const response = await fetch(LM_STUDIO_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'local-model', // LM Studio will use whatever model is loaded
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt
+    // Try to use the new LLM client system first
+    let botMessage: string
+    let llmProvider = 'unknown'
+    
+    try {
+      // Get info about the current LLM client
+      const clientInfo = getGlobalClientInfo()
+      if (clientInfo) {
+        llmProvider = `${clientInfo.provider}:${clientInfo.model}`
+        console.log(`🤖 Using LLM Provider: ${llmProvider}`)
+      }
+
+      // Call LLM using the new client system
+      botMessage = await callLLM(fullPrompt, false, 30000) // 30 second timeout
+      
+      console.log(`✅ LLM Response received from ${llmProvider}`)
+      
+    } catch (llmError) {
+      console.warn(`⚠️ LLM Client failed (${llmError instanceof LLMError ? llmError.provider : 'unknown'}): ${llmError instanceof Error ? llmError.message : 'Unknown error'}`)
+      
+      // Fallback to original LM Studio logic
+      console.log('🔄 Falling back to LM Studio...')
+      
+      try {
+        const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234/v1/chat/completions'
+
+        const response = await fetch(LM_STUDIO_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
-          {
-            role: 'user',
-            content: message
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-        stream: false
-      })
-    })
+          body: JSON.stringify({
+            model: 'local-model', // LM Studio will use whatever model is loaded
+            messages: [
+              {
+                role: 'system',
+                content: systemPrompt
+              },
+              {
+                role: 'user',
+                content: message
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 500,
+            stream: false
+          })
+        })
 
-    if (!response.ok) {
-      throw new Error(`LM Studio API error: ${response.status}`)
+        if (!response.ok) {
+          throw new Error(`LM Studio API error: ${response.status}`)
+        }
+
+        const data = await response.json()
+        botMessage = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.'
+        llmProvider = 'lm-studio-fallback'
+        
+        console.log('✅ LM Studio fallback successful')
+        
+      } catch (fallbackError) {
+        // Both LLM client and LM Studio failed
+        throw new Error(`All LLM providers failed. Primary: ${llmError instanceof Error ? llmError.message : 'Unknown'}, Fallback: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown'}`)
+      }
     }
-
-    const data = await response.json()
-    const botMessage = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.'
 
     // Save bot response to database
     const botMessageId = db.saveMessage(clientIP, botMessage, 'bot', sessionId, userAgent)
@@ -162,6 +199,7 @@ export async function POST(request: NextRequest) {
       ip: clientIP,
       responseLength: botMessage.length,
       event: 'LLM_RESPONSE_SUCCESS',
+      provider: llmProvider,
       userMessageId,
       botMessageId
     }
